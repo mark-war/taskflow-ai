@@ -40,6 +40,31 @@ router.get("/", protect, async (req, res, next) => {
 });
 
 /**
+ * GET /api/activity?boardId=&teamId=&taskId=&limit=
+ */
+router.get("/activity", protect, async (req, res, next) => {
+  try {
+    const { boardId, teamId, taskId, limit = 50, page = 1 } = req.query;
+    const query = {};
+    if (boardId) query.board = boardId;
+    if (teamId) query.team = teamId;
+    if (taskId) query.task = taskId;
+
+    const activity = await Activity.find(query)
+      .populate("actor", "name avatar")
+      .populate("task", "title")
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(Number(limit));
+
+    const total = await Activity.countDocuments(query);
+    res.json({ activity, total });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * GET /api/activity/team/:teamId
  */
 router.get("/team/:teamId", protect, async (req, res, next) => {

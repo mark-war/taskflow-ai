@@ -1,6 +1,3 @@
-// ============================================================
-// ai.js — AI routes (ESM)
-// ============================================================
 import express from "express";
 import auth from "../middleware/auth.js";
 import {
@@ -109,6 +106,7 @@ function applyFilter(tasks, filter) {
 
 // ============================================================
 // POST /api/ai/command
+// Main AI command endpoint with tool execution
 // ============================================================
 router.post("/command", protect, async (req, res, next) => {
   try {
@@ -130,6 +128,7 @@ router.post("/command", protect, async (req, res, next) => {
     const executedActions = [];
     const io = req.app.get("io");
 
+    // Execute each tool call returned by the AI
     for (const toolCall of aiResult.toolCalls) {
       const { name, arguments: argsStr } = toolCall.function;
 
@@ -264,6 +263,7 @@ router.post("/command", protect, async (req, res, next) => {
       }
     }
 
+    // Log AI activity after executing all actions
     await Activity.create({
       type: "ai_action",
       actor: req.user._id,
@@ -285,6 +285,7 @@ router.post("/command", protect, async (req, res, next) => {
 
 // ============================================================
 // POST /api/ai/enrich/:taskId
+// Enrich a task with AI-generated metadata
 // ============================================================
 router.post("/enrich/:taskId", protect, async (req, res, next) => {
   try {

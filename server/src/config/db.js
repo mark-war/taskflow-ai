@@ -3,7 +3,7 @@ import { connect } from 'mongoose';
 const connectDB = async () => {
   try {
     const conn = await connect(process.env.MONGODB_URI, {
-      serverSelectionTimeoutMS: 5000,
+      serverSelectionTimeoutMS: 5001,
     });
     console.log(`✅ MongoDB connected: ${conn.connection.host}`);
   } catch (err) {

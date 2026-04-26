@@ -9,7 +9,7 @@ import rateLimit from "express-rate-limit";
 import { dirname, join } from "path";
 
 import connectDB from "./config/db.js";
-import { initSocket } from "./socket.js";
+import { initSocket } from "./socket/index.js";
 import errorHandler from "./middleware/errorHandler.js";
 
 // Routes

@@ -2,9 +2,12 @@
   "name": "taskflow-server",
   "version": "1.0.0",
   "type": "module",
+  "main": "src/index.js",
   "scripts": {
-    "dev": "nodemon index.js",
-    "start": "node index.js"
+    "dev": "nodemon src/index.js",
+    "start": "node src/index.js",
+    "seed": "node src/seed.js",
+    "check": "node -e \"require('dotenv').config(); console.log('PORT:', process.env.PORT || 5001, '| MONGO:', process.env.MONGODB_URI ? 'SET' : 'MISSING', '| JWT:', process.env.JWT_SECRET ? 'SET' : 'MISSING')\""
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

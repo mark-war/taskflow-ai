@@ -1,11 +1,10 @@
 import { Outlet } from "react-router-dom";
-import { useUIStore } from "../../store";
-import Sidebar from "../Sidebar";
-import Topbar from "../Topbar";
-
-import AICommandBar from "../AI/AICommandBar";
+import { useUIStore } from "@/store/index";
+import Sidebar from "./Sidebar";
+import Topbar from "./Topbar";
+import AICommandBar from "@/components/AI/AICommandBar";
 import { useEffect } from "react";
-import { getSocket } from "../../services/socket";
+import { getSocket } from "@/services/socket";
 
 export default function AppLayout() {
   const { sidebarOpen, aiBarOpen } = useUIStore();
