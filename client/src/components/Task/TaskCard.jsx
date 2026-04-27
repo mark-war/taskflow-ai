@@ -5,7 +5,6 @@ import {
   Calendar,
   MessageSquare,
   Paperclip,
-  AlertCircle,
   CheckSquare,
   GripVertical,
   Zap,
@@ -13,27 +12,37 @@ import {
 import clsx from "clsx";
 
 const PRIORITY_CONFIG = {
-  critical: { color: "text-red-500", bg: "bg-red-500/10", label: "🔴" },
-  high: { color: "text-orange-500", bg: "bg-orange-500/10", label: "🟠" },
-  medium: { color: "text-yellow-500", bg: "bg-yellow-500/10", label: "🟡" },
-  low: { color: "text-green-500", bg: "bg-green-500/10", label: "🟢" },
+  critical: { label: "🔴", ring: "ring-red-400/40" },
+  high: { label: "🟠", ring: "ring-orange-400/40" },
+  medium: { label: "🟡", ring: "" },
+  low: { label: "🟢", ring: "" },
 };
 
 const TYPE_CONFIG = {
-  bug: { icon: "🐛", color: "text-red-500" },
-  story: { icon: "📖", color: "text-blue-500" },
-  epic: { icon: "⚡", color: "text-purple-500" },
-  milestone: { icon: "🏆", color: "text-amber-500" },
-  task: { icon: "✓", color: "text-[var(--color-text-muted)]" },
+  bug: "🐛",
+  story: "📖",
+  epic: "⚡",
+  milestone: "🏆",
+  task: "✓",
 };
+
+// Safely extract the icon whether the value is a string or legacy {icon, color} object
+function getTypeIcon(type) {
+  const val = TYPE_CONFIG[type] ?? TYPE_CONFIG.task;
+  if (typeof val === "string") return val;
+  if (typeof val === "object" && val.icon) return val.icon;
+  return "✓";
+}
 
 function dueDateLabel(date) {
   if (!date) return null;
   const d = new Date(date);
-  if (isToday(d)) return { label: "Today", urgent: true };
-  if (isTomorrow(d)) return { label: "Tomorrow", urgent: false };
-  if (isPast(d)) return { label: format(d, "MMM d"), overdue: true };
-  return { label: format(d, "MMM d"), urgent: false };
+  if (isToday(d)) return { label: "Today", urgent: true, overdue: false };
+  if (isTomorrow(d))
+    return { label: "Tomorrow", urgent: false, overdue: false };
+  if (isPast(d))
+    return { label: format(d, "MMM d"), urgent: false, overdue: true };
+  return { label: format(d, "MMM d"), urgent: false, overdue: false };
 }
 
 export default function TaskCard({ task, onClick, isDragging = false }) {
@@ -41,6 +50,7 @@ export default function TaskCard({ task, onClick, isDragging = false }) {
     attributes,
     listeners,
     setNodeRef,
+    setActivatorNodeRef,
     transform,
     transition,
     isDragging: isSortableDragging,
@@ -52,10 +62,12 @@ export default function TaskCard({ task, onClick, isDragging = false }) {
   };
 
   const priority = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium;
-  const type = TYPE_CONFIG[task.type] || TYPE_CONFIG.task;
+  const typeIcon = getTypeIcon(task.type);
   const due = dueDateLabel(task.dueDate);
   const subtaskDone = task.subtasks?.filter((s) => s.completed).length || 0;
   const subtaskTotal = task.subtasks?.length || 0;
+
+  const isBeingDragged = isDragging || isSortableDragging;
 
   return (
     <div
@@ -63,33 +75,32 @@ export default function TaskCard({ task, onClick, isDragging = false }) {
       style={style}
       onClick={onClick}
       className={clsx(
-        "group bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-3",
-        "cursor-pointer select-none shadow-task transition-all duration-150",
-        "hover:shadow-task-hover hover:border-brand-500/30",
-        (isDragging || isSortableDragging) && "opacity-40 rotate-1",
+        "group relative bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-3",
+        "cursor-pointer select-none transition-all duration-150",
+        "hover:border-brand-500/30 hover:shadow-task-hover",
+        isBeingDragged && "opacity-30 ring-2 ring-brand-500/50",
+        priority.ring && `hover:ring-1 ${priority.ring}`,
       )}
     >
-      {/* Drag handle + type + priority row */}
+      {/* Top row: drag handle + type + priority */}
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5">
-          {/* Drag handle */}
+          {/* Drag handle — separate activator so card click still works */}
           <div
+            ref={setActivatorNodeRef}
             {...attributes}
             {...listeners}
             onClick={(e) => e.stopPropagation()}
-            className="opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing text-[var(--color-text-subtle)] -ml-1 transition-opacity"
+            className="opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing text-[var(--color-text-subtle)] -ml-1 p-0.5 rounded transition-opacity touch-none"
           >
-            <GripVertical size={12} />
+            <GripVertical size={13} />
           </div>
-          <span className="text-xs" title={task.type}>
-            {type.icon}
-          </span>
+          <span className="text-xs">{typeIcon}</span>
           <span className="text-[10px] text-[var(--color-text-subtle)] font-mono uppercase tracking-wide">
             {task.type}
           </span>
         </div>
-        {/* Priority indicator */}
-        <span title={`Priority: ${task.priority}`} className="text-xs">
+        <span className="text-xs" title={`${task.priority} priority`}>
           {priority.label}
         </span>
       </div>
@@ -119,9 +130,9 @@ export default function TaskCard({ task, onClick, isDragging = false }) {
         </div>
       )}
 
-      {/* AI summary snippet */}
+      {/* AI summary */}
       {task.aiSummary && (
-        <div className="flex items-start gap-1.5 mb-2.5 bg-brand-500/5 rounded-lg px-2 py-1.5">
+        <div className="flex items-start gap-1.5 mb-2.5 bg-brand-500/5 rounded-lg px-2 py-1.5 border border-brand-500/10">
           <Zap size={10} className="text-brand-500 mt-0.5 flex-shrink-0" />
           <p className="text-[11px] text-[var(--color-text-muted)] leading-relaxed line-clamp-2">
             {task.aiSummary}
@@ -129,10 +140,10 @@ export default function TaskCard({ task, onClick, isDragging = false }) {
         </div>
       )}
 
-      {/* Footer row */}
+      {/* Footer */}
       <div className="flex items-center justify-between mt-1">
-        {/* Left: due date, metadata */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Due date */}
           {due && (
             <div
               className={clsx(
@@ -150,6 +161,7 @@ export default function TaskCard({ task, onClick, isDragging = false }) {
             </div>
           )}
 
+          {/* Subtasks */}
           {subtaskTotal > 0 && (
             <div className="flex items-center gap-0.5 text-[10px] text-[var(--color-text-subtle)]">
               <CheckSquare size={9} />
@@ -157,6 +169,7 @@ export default function TaskCard({ task, onClick, isDragging = false }) {
             </div>
           )}
 
+          {/* Comments */}
           {task.comments?.length > 0 && (
             <div className="flex items-center gap-0.5 text-[10px] text-[var(--color-text-subtle)]">
               <MessageSquare size={9} />
@@ -164,6 +177,7 @@ export default function TaskCard({ task, onClick, isDragging = false }) {
             </div>
           )}
 
+          {/* Attachments */}
           {task.attachments?.length > 0 && (
             <div className="flex items-center gap-0.5 text-[10px] text-[var(--color-text-subtle)]">
               <Paperclip size={9} />
@@ -172,13 +186,13 @@ export default function TaskCard({ task, onClick, isDragging = false }) {
           )}
         </div>
 
-        {/* Right: assignee avatars */}
-        <div className="flex -space-x-1.5">
+        {/* Assignee avatars */}
+        <div className="flex -space-x-1.5 flex-shrink-0">
           {(task.assignees || []).slice(0, 3).map((a) => (
             <div
               key={a._id || a}
               title={a.name}
-              className="w-5 h-5 rounded-full bg-brand-500 border-2 border-[var(--color-surface)] flex items-center justify-center text-white text-[9px] font-medium flex-shrink-0"
+              className="w-5 h-5 rounded-full bg-brand-500 border-2 border-[var(--color-surface)] flex items-center justify-center text-white text-[9px] font-bold"
             >
               {a.name?.[0]?.toUpperCase() || "?"}
             </div>
@@ -190,7 +204,7 @@ export default function TaskCard({ task, onClick, isDragging = false }) {
       {subtaskTotal > 0 && (
         <div className="mt-2.5 h-1 bg-[var(--color-border)] rounded-full overflow-hidden">
           <div
-            className="h-full bg-emerald-400 rounded-full transition-all duration-300"
+            className="h-full bg-emerald-400 rounded-full transition-all duration-500"
             style={{ width: `${(subtaskDone / subtaskTotal) * 100}%` }}
           />
         </div>

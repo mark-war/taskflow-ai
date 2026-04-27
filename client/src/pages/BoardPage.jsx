@@ -1,111 +1,140 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "react-router-dom";
 import {
   DndContext,
   DragOverlay,
   PointerSensor,
+  KeyboardSensor,
   useSensor,
   useSensors,
-  closestCorners,
+  closestCenter,
   defaultDropAnimationSideEffects,
 } from "@dnd-kit/core";
-import { arrayMove } from "@dnd-kit/sortable";
-import { useBoardStore, useTaskStore } from "../store";
-import { boardsAPI, tasksAPI } from "../services/api";
-import { joinBoard, leaveBoard } from "../services/socket";
-import BoardColumn from "../components/Board/BoardColumn";
-import TaskCard from "../components/Task/TaskCard";
-import TaskModal from "../components/Task/TaskModal";
-import BoardHeader from "../components/Board/BoardHeader";
+import { sortableKeyboardCoordinates, arrayMove } from "@dnd-kit/sortable";
+import { useBoardStore, useTaskStore } from "@/store/index";
+import { boardsAPI, tasksAPI } from "@/services/api";
+import { joinBoard, leaveBoard } from "@/services/socket";
+import BoardColumn from "@/components/Board/BoardColumn";
+import TaskCard from "@/components/Task/TaskCard";
+import TaskModal from "@/components/Task/TaskModal";
+import BoardHeader from "@/components/Board/BoardHeader";
 import { Plus, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
 
 export default function BoardPage() {
   const { boardId } = useParams();
-  const { setCurrentBoard, currentBoard } = useBoardStore();
-  const { tasks, setTasks, setLoading, loading, reorderTasks } = useTaskStore();
+  const { setCurrentBoard, currentBoard, updateBoard } = useBoardStore();
+  const { tasks, setTasks, setLoading, loading } = useTaskStore();
 
   const [activeTask, setActiveTask] = useState(null);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
 
+  // Stable ref so DnD callbacks never have stale task state
+  const tasksRef = useRef(tasks);
+  useEffect(() => {
+    tasksRef.current = tasks;
+  }, [tasks]);
+
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
   );
 
   // Load board + tasks
   useEffect(() => {
     if (!boardId) return;
-
     setLoading(true);
-    Promise.all([boardsAPI.get(boardId), tasksAPI.list({ boardId })])
+    Promise.all([
+      boardsAPI.get(boardId),
+      tasksAPI.list({ boardId, limit: 500 }),
+    ])
       .then(([boardRes, tasksRes]) => {
         setCurrentBoard(boardRes.data.board);
         setTasks(tasksRes.data.tasks);
       })
-      .catch(() => {
-        toast.error("Failed to load board");
-      })
+      .catch(() => toast.error("Failed to load board"))
       .finally(() => setLoading(false));
 
-    // Join socket room
     joinBoard(boardId);
     return () => leaveBoard(boardId);
   }, [boardId]);
 
-  // ── DnD handlers ──────────────────────────────────────────
-  const handleDragStart = ({ active }) => {
-    const task = tasks.find((t) => t._id === active.id);
+  // DnD drag start — snapshot the dragged task for overlay
+  const handleDragStart = useCallback(({ active }) => {
+    const task = tasksRef.current.find((t) => t._id === active.id);
     setActiveTask(task || null);
-  };
+  }, []);
 
-  const handleDragOver = ({ active, over }) => {
-    if (!over) return;
-    const activeTask = tasks.find((t) => t._id === active.id);
-    if (!activeTask) return;
+  // DnD drag over — optimistic reorder in store
+  const handleDragOver = useCallback(
+    ({ active, over }) => {
+      if (!over || active.id === over.id) return;
 
-    // Over a column
-    const overIsColumn = currentBoard?.columns?.some((c) => c.id === over.id);
-    if (overIsColumn && activeTask.column !== over.id) {
-      reorderTasks(active.id, null, over.id);
-    }
-  };
-
-  const handleDragEnd = useCallback(
-    async ({ active, over }) => {
-      setActiveTask(null);
-      if (!over) return;
-
-      const draggedTask = tasks.find((t) => t._id === active.id);
+      const current = tasksRef.current;
+      const draggedTask = current.find((t) => t._id === active.id);
       if (!draggedTask) return;
 
       const overIsColumn = currentBoard?.columns?.some((c) => c.id === over.id);
-      const targetColumn = overIsColumn
-        ? over.id
-        : tasks.find((t) => t._id === over.id)?.column;
-
+      const overTask = current.find((t) => t._id === over.id);
+      const targetColumn = overIsColumn ? over.id : overTask?.column;
       if (!targetColumn) return;
 
-      // Reorder within store (optimistic)
-      reorderTasks(active.id, over.id, targetColumn);
+      setTasks((prev) => {
+        // Move task to new column
+        let updated = prev.map((t) =>
+          t._id === active.id ? { ...t, column: targetColumn } : t,
+        );
 
-      // Compute new positions for persistence
-      const columnTasks = tasks
-        .filter((t) => t.column === targetColumn)
-        .sort((a, b) => a.position - b.position);
+        // If dropping over a task (not a column), reorder within list
+        if (!overIsColumn && overTask) {
+          const activeIdx = updated.findIndex((t) => t._id === active.id);
+          const overIdx = updated.findIndex((t) => t._id === over.id);
+          updated = arrayMove(updated, activeIdx, overIdx);
+        }
 
-      const updates = columnTasks.map((t, i) => ({
+        // Recalculate position indices per column
+        const groups = {};
+        updated.forEach((t) => {
+          if (!groups[t.column]) groups[t.column] = [];
+          groups[t.column].push(t._id);
+        });
+
+        return updated.map((t) => ({
+          ...t,
+          position: groups[t.column].indexOf(t._id),
+        }));
+      });
+    },
+    [currentBoard, setTasks],
+  );
+
+  // DnD drag end — persist final order to server
+  const handleDragEnd = useCallback(
+    async ({ active }) => {
+      setActiveTask(null);
+
+      const current = tasksRef.current;
+      const movedTask = current.find((t) => t._id === active.id);
+      if (!movedTask) return;
+
+      // Send all tasks (server does bulk upsert on position+column)
+      const updates = current.map((t) => ({
         id: t._id,
-        column: targetColumn,
-        position: i,
+        column: t.column,
+        position: t.position,
       }));
 
       try {
         await tasksAPI.reorder(updates);
       } catch {
-        toast.error("Failed to save task order");
+        toast.error("Failed to save order — reloading");
+        const res = await tasksAPI.list({ boardId, limit: 500 });
+        setTasks(res.data.tasks);
       }
     },
-    [tasks, currentBoard],
+    [boardId, setTasks],
   );
 
   const columns = currentBoard?.columns || [];
@@ -127,18 +156,20 @@ export default function BoardPage() {
     <div className="flex flex-col h-full">
       <BoardHeader board={currentBoard} />
 
-      {/* Kanban columns */}
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCorners}
+        collisionDetection={closestCenter}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-        <div className="flex-1 overflow-x-auto board-scroll">
+        <div className="flex-1 overflow-x-auto">
           <div
-            className="flex gap-3 p-4 h-full min-h-0"
-            style={{ minWidth: "max-content" }}
+            className="flex gap-3 p-4"
+            style={{
+              minWidth: "max-content",
+              minHeight: "calc(100vh - 112px)",
+            }}
           >
             {columns.map((column) => (
               <BoardColumn
@@ -151,29 +182,25 @@ export default function BoardPage() {
                 onTaskClick={(task) => setSelectedTaskId(task._id)}
               />
             ))}
-
-            {/* Add column button */}
             <AddColumnButton boardId={boardId} />
           </div>
         </div>
 
-        {/* Drag overlay */}
         <DragOverlay
           dropAnimation={{
             sideEffects: defaultDropAnimationSideEffects({
-              styles: { active: { opacity: "0.5" } },
+              styles: { active: { opacity: "0.4" } },
             }),
           }}
         >
           {activeTask && (
-            <div className="rotate-1 opacity-95">
+            <div className="rotate-2 scale-105 shadow-modal opacity-95">
               <TaskCard task={activeTask} isDragging />
             </div>
           )}
         </DragOverlay>
       </DndContext>
 
-      {/* Task detail modal */}
       {selectedTaskId && (
         <TaskModal
           taskId={selectedTaskId}
@@ -192,7 +219,7 @@ function AddColumnButton({ boardId }) {
   const handleAdd = async () => {
     if (!name.trim()) return;
     const column = {
-      id: name.toLowerCase().replace(/\s+/g, "_") + "_" + Date.now(),
+      id: `col_${name.toLowerCase().replace(/\s+/g, "_")}_${Date.now()}`,
       title: name.trim(),
       color: "#6366f1",
       position: currentBoard?.columns?.length || 0,
@@ -203,6 +230,7 @@ function AddColumnButton({ boardId }) {
       updateBoard(boardId, { columns: updated });
       setName("");
       setAdding(false);
+      toast.success(`Column "${column.title}" added`);
     } catch {
       toast.error("Failed to add column");
     }
@@ -212,7 +240,7 @@ function AddColumnButton({ boardId }) {
     return (
       <button
         onClick={() => setAdding(true)}
-        className="flex-shrink-0 w-72 h-10 flex items-center gap-2 px-3 rounded-xl border-2 border-dashed border-[var(--color-border)] text-[var(--color-text-subtle)] hover:border-brand-500/40 hover:text-brand-500 transition-all duration-150 text-sm mt-0.5"
+        className="flex-shrink-0 w-72 h-10 flex items-center gap-2 px-3 rounded-xl border-2 border-dashed border-[var(--color-border)] text-[var(--color-text-subtle)] hover:border-brand-500/40 hover:text-brand-500 transition-all duration-150 text-sm self-start"
       >
         <Plus size={15} />
         Add column
@@ -221,7 +249,7 @@ function AddColumnButton({ boardId }) {
   }
 
   return (
-    <div className="flex-shrink-0 w-72 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-3 h-fit space-y-2 mt-0.5">
+    <div className="flex-shrink-0 w-72 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-3 h-fit space-y-2 self-start">
       <input
         autoFocus
         value={name}

@@ -42,7 +42,13 @@ export const useTaskStore = create((set, get) => ({
   loading: false,
   selectedTask: null,
 
-  setTasks: (tasks) => set({ tasks }),
+  setTasks: (tasksOrUpdater) =>
+    set((s) => ({
+      tasks:
+        typeof tasksOrUpdater === "function"
+          ? tasksOrUpdater(s.tasks)
+          : tasksOrUpdater,
+    })),
   setLoading: (v) => set({ loading: v }),
   setSelectedTask: (task) => set({ selectedTask: task }),
 

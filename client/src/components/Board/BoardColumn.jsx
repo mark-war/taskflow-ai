@@ -1,16 +1,13 @@
 import {
   SortableContext,
   verticalListSortingStrategy,
-  useSortable,
 } from "@dnd-kit/sortable";
 import { useDroppable } from "@dnd-kit/core";
-import { CSS } from "@dnd-kit/utilities";
 import { useState } from "react";
-import { Plus, MoreHorizontal, Dot } from "lucide-react";
-import TaskCard from "../../components/Task/TaskCard";
-import { tasksAPI } from "../../services/api";
-import { useTaskStore } from "../../store";
-import { useAuthStore } from "../../store/authStore";
+import { Plus, MoreHorizontal } from "lucide-react";
+import TaskCard from "@/components/Task/TaskCard";
+import { tasksAPI } from "@/services/api";
+import { useTaskStore } from "@/store/index";
 import toast from "react-hot-toast";
 import clsx from "clsx";
 
@@ -27,8 +24,8 @@ export default function BoardColumn({ column, tasks, boardId, onTaskClick }) {
   const [addingTask, setAddingTask] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const { addTask } = useTaskStore();
-  const { user } = useAuthStore();
 
+  // Make the column itself a drop target (for dropping into empty columns)
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
 
   const handleAddTask = async () => {
@@ -55,15 +52,15 @@ export default function BoardColumn({ column, tasks, boardId, onTaskClick }) {
   return (
     <div
       className={clsx(
-        "flex-shrink-0 w-72 flex flex-col rounded-xl border transition-all duration-150",
+        "flex-shrink-0 w-72 flex flex-col rounded-xl border transition-colors duration-150",
         isOver
-          ? "border-brand-500/50 bg-brand-500/5"
+          ? "border-brand-500/60 bg-brand-500/5"
           : "border-[var(--color-border)] bg-[var(--color-surface)]",
       )}
       style={{ maxHeight: "calc(100vh - 140px)" }}
     >
-      {/* Column header */}
-      <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[var(--color-border)]">
+      {/* Header */}
+      <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[var(--color-border)] flex-shrink-0">
         <div
           className="w-2.5 h-2.5 rounded-full flex-shrink-0"
           style={{ backgroundColor: color }}
@@ -71,8 +68,7 @@ export default function BoardColumn({ column, tasks, boardId, onTaskClick }) {
         <span className="font-medium text-sm flex-1 truncate">
           {column.title}
         </span>
-        <div className="flex items-center gap-1.5">
-          {/* Task count / WIP limit */}
+        <div className="flex items-center gap-1">
           <span
             className={clsx(
               "text-xs px-1.5 py-0.5 rounded-full font-medium",
@@ -98,12 +94,12 @@ export default function BoardColumn({ column, tasks, boardId, onTaskClick }) {
 
       {/* WIP warning */}
       {wipExceeded && (
-        <div className="px-3 py-1.5 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs border-b border-red-100 dark:border-red-900/30">
+        <div className="px-3 py-1.5 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs border-b border-red-100 dark:border-red-900/30 flex-shrink-0">
           ⚠️ WIP limit exceeded ({tasks.length}/{column.wipLimit})
         </div>
       )}
 
-      {/* Tasks */}
+      {/* Task list — droppable + sortable */}
       <div
         ref={setNodeRef}
         className="flex-1 overflow-y-auto p-2 space-y-2 min-h-[80px]"
@@ -121,19 +117,20 @@ export default function BoardColumn({ column, tasks, boardId, onTaskClick }) {
           ))}
         </SortableContext>
 
+        {/* Empty state — also acts as drop hint */}
         {tasks.length === 0 && !addingTask && (
-          <div
-            className="flex items-center justify-center h-16 text-xs text-[var(--color-text-subtle)] rounded-lg border-2 border-dashed border-[var(--color-border)] cursor-pointer hover:border-brand-500/30 hover:text-brand-500/60 transition-colors"
+          <button
             onClick={() => setAddingTask(true)}
+            className="w-full flex items-center justify-center h-16 text-xs text-[var(--color-text-subtle)] rounded-lg border-2 border-dashed border-[var(--color-border)] hover:border-brand-500/40 hover:text-brand-500/70 transition-colors"
           >
-            Drop tasks here
-          </div>
+            Drop tasks here or click to add
+          </button>
         )}
       </div>
 
-      {/* Quick add task */}
+      {/* Inline quick-add form */}
       {addingTask && (
-        <div className="p-2 border-t border-[var(--color-border)] space-y-2">
+        <div className="p-2 border-t border-[var(--color-border)] space-y-2 flex-shrink-0">
           <textarea
             autoFocus
             value={newTitle}
@@ -150,7 +147,7 @@ export default function BoardColumn({ column, tasks, boardId, onTaskClick }) {
             }}
             placeholder="Task title… (Enter to add)"
             rows={2}
-            className="input text-sm resize-none"
+            className="input text-sm resize-none w-full"
           />
           <div className="flex gap-1.5">
             <button
@@ -176,10 +173,10 @@ export default function BoardColumn({ column, tasks, boardId, onTaskClick }) {
       {!addingTask && (
         <button
           onClick={() => setAddingTask(true)}
-          className="flex items-center gap-2 px-3 py-2 text-xs text-[var(--color-text-subtle)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] transition-colors rounded-b-xl border-t border-[var(--color-border)]"
+          className="flex items-center gap-2 px-3 py-2 text-xs text-[var(--color-text-subtle)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] transition-colors rounded-b-xl border-t border-[var(--color-border)] flex-shrink-0"
         >
           <Plus size={12} />
-          Add task
+          Add Task
         </button>
       )}
     </div>
