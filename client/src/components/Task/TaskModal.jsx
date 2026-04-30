@@ -18,21 +18,14 @@ import {
   Clock,
 } from "lucide-react";
 import { tasksAPI, aiAPI, filesAPI } from "@/services/api";
-import { useTaskStore } from "@/store/index";
+import { useTaskStore, useBoardStore } from "@/store/index";
 import { useAuthStore } from "@/store/authStore";
 import { format } from "date-fns";
 import toast from "react-hot-toast";
 import clsx from "clsx";
 
 const PRIORITY_OPTIONS = ["critical", "high", "medium", "low"];
-const STATUS_OPTIONS = [
-  "backlog",
-  "todo",
-  "in_progress",
-  "in_review",
-  "blocked",
-  "done",
-];
+// STATUS_OPTIONS now come from the board's columns dynamically (see component)
 const PRIORITY_COLORS = {
   critical: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
   high: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
@@ -43,7 +36,21 @@ const PRIORITY_COLORS = {
 
 export default function TaskModal({ taskId, onClose }) {
   const { updateTask, removeTask } = useTaskStore();
+  const { currentBoard } = useBoardStore();
   const { user } = useAuthStore();
+
+  // Build status options dynamically from board columns so custom columns appear
+  const statusOptions = currentBoard?.columns?.map((c) => ({
+    value: c.id,
+    label: c.title,
+  })) || [
+    { value: "backlog", label: "Backlog" },
+    { value: "todo", label: "To Do" },
+    { value: "in_progress", label: "In Progress" },
+    { value: "in_review", label: "In Review" },
+    { value: "blocked", label: "Blocked" },
+    { value: "done", label: "Done" },
+  ];
   const [task, setTask] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -61,6 +68,26 @@ export default function TaskModal({ taskId, onClose }) {
       .catch(() => toast.error("Failed to load task"))
       .finally(() => setLoading(false));
   }, [taskId]);
+
+  // Listen for real-time updates to this task and update local state accordingly
+  useEffect(() => {
+    const storeTask = useTaskStore
+      .getState()
+      .tasks.find((t) => t.id === taskId || t._id === taskId);
+
+    if (storeTask && task) {
+      setTask((prevTask) => {
+        // Only update if the status/column actually changed to avoid unnecessary re-renders
+        if (
+          prevTask.status === storeTask.status &&
+          prevTask.column === storeTask.column
+        ) {
+          return prevTask;
+        }
+        return { ...prevTask, ...storeTask };
+      });
+    }
+  }, [taskId, task?.status, task?.column]);
 
   // Close on Escape
   useEffect(() => {
@@ -273,9 +300,9 @@ export default function TaskModal({ taskId, onClose }) {
                         }
                         className="input text-sm"
                       >
-                        {STATUS_OPTIONS.map((s) => (
-                          <option key={s} value={s}>
-                            {s.replace("_", " ")}
+                        {statusOptions.map((s) => (
+                          <option key={s.value} value={s.value}>
+                            {s.label}
                           </option>
                         ))}
                       </select>

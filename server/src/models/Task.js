@@ -3,6 +3,7 @@
 // ============================================================
 import { Schema, model } from "mongoose";
 
+// Subtask and Comment schemas are embedded within Task for simplicity and performance.
 const subtaskSchema = new Schema(
   {
     title: { type: String, required: true },
@@ -12,6 +13,7 @@ const subtaskSchema = new Schema(
   { timestamps: true },
 );
 
+// Comments can have mentions and attachments, and are stored as an array within the Task document for quick access.
 const commentSchema = new Schema(
   {
     author: { type: Schema.Types.ObjectId, ref: "User", required: true },
@@ -24,6 +26,7 @@ const commentSchema = new Schema(
   { timestamps: true },
 );
 
+// The main Task schema includes references to Board, Users, and other Tasks for dependencies. It also has fields for status, priority, type, and AI-generated insights.
 const taskSchema = new Schema(
   {
     title: { type: String, required: true, trim: true, maxlength: 500 },
@@ -34,16 +37,8 @@ const taskSchema = new Schema(
 
     status: {
       type: String,
-      enum: [
-        "backlog",
-        "todo",
-        "in_progress",
-        "in_review",
-        "blocked",
-        "done",
-        "archived",
-      ],
       default: "todo",
+      // No enum — status mirrors the column id, which can be custom
     },
     priority: {
       type: String,
@@ -99,7 +94,7 @@ const taskSchema = new Schema(
   },
 );
 
-// Virtual: completion percentage based on subtasks
+// Virtual field to calculate subtask completion percentage for progress tracking.
 taskSchema.virtual("subtaskProgress").get(function () {
   if (!this.subtasks.length) return null;
   const done = this.subtasks.filter((s) => s.completed).length;

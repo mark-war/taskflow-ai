@@ -1,15 +1,21 @@
-import { connect } from 'mongoose';
+import mongoose from "mongoose";
 
 const connectDB = async () => {
   try {
-    const conn = await connect(process.env.MONGODB_URI, {
-      serverSelectionTimeoutMS: 5001,
+    mongoose.set("strictQuery", false);
+    const conn = await mongoose.connect(process.env.MONGODB_URI, {
+      serverSelectionTimeoutMS: 8000,
     });
-    console.log(`✅ MongoDB connected: ${conn.connection.host}`);
+    console.log(`✅  MongoDB → ${conn.connection.host}`);
   } catch (err) {
-    console.error('❌ MongoDB connection failed:', err.message);
+    console.error("\n❌  MongoDB connection failed:", err.message);
+    console.error("   Check your MONGODB_URI in server/.env\n");
     process.exit(1);
   }
 };
+
+mongoose.connection.on("disconnected", () =>
+  console.warn("⚠️  MongoDB disconnected"),
+);
 
 export default connectDB;

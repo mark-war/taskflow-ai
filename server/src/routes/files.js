@@ -6,6 +6,11 @@ import { v4 as uuidv4 } from "uuid";
 import auth from "../middleware/auth.js";
 import { Activity } from "../models/index.js";
 import Task from "../models/Task.js";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const router = express.Router();
 const { protect } = auth;

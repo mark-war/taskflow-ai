@@ -2,6 +2,7 @@ import jsonwebtoken from "jsonwebtoken";
 const { verify } = jsonwebtoken;
 import { User, Team } from "../models/index.js";
 
+// Middleware to protect routes and ensure user is authenticated
 const protect = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
@@ -31,7 +32,7 @@ const protect = async (req, res, next) => {
   }
 };
 
-// Check if user is member of a team
+// Middleware to check if user is a member of the team with required role
 const requireTeamMember =
   (minRole = "member") =>
   async (req, res, next) => {

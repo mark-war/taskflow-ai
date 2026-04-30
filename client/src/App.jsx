@@ -1,19 +1,16 @@
 import { Routes, Route, Navigate } from "react-router-dom";
-import { useAuthStore } from "./store/authStore";
+import { useAuthStore } from "@/store/authStore";
 import { useEffect } from "react";
-import { useThemeStore } from "./store/index";
+import { useThemeStore } from "@/store/themeStore";
 
-// Pages
-import LoginPage from "./pages/LoginPage";
-import RegisterPage from "./pages/RegisterPage";
-import DashboardPage from "./pages/DashboardPage";
-import BoardPage from "./pages/BoardPage";
-import TimelinePage from "./pages/TimelinePage";
-import TeamPage from "./pages/TeamPage";
-import SettingsPage from "./pages/SettingsPage";
-
-// Layout
-import AppLayout from "./components/Layout/AppLayout";
+import LoginPage from "@/pages/LoginPage";
+import RegisterPage from "@/pages/RegisterPage";
+import DashboardPage from "@/pages/DashboardPage";
+import BoardPage from "@/pages/BoardPage";
+import TimelinePage from "@/pages/TimelinePage"; // handles both timeline + list
+import TeamPage from "@/pages/TeamPage";
+import SettingsPage from "@/pages/SettingsPage";
+import AppLayout from "@/components/Layout/AppLayout";
 
 function PrivateRoute({ children }) {
   const { token } = useAuthStore();
@@ -30,20 +27,15 @@ export default function App() {
 
   useEffect(() => {
     const root = document.documentElement;
-    if (
+    const isDark =
       theme === "dark" ||
       (theme === "system" &&
-        window.matchMedia("(prefers-color-scheme: dark)").matches)
-    ) {
-      root.classList.add("dark");
-    } else {
-      root.classList.remove("dark");
-    }
+        window.matchMedia("(prefers-color-scheme: dark)").matches);
+    root.classList.toggle("dark", isDark);
   }, [theme]);
 
   return (
     <Routes>
-      {/* Public */}
       <Route
         path="/login"
         element={
@@ -61,7 +53,6 @@ export default function App() {
         }
       />
 
-      {/* Private */}
       <Route
         path="/"
         element={
@@ -73,6 +64,8 @@ export default function App() {
         <Route index element={<DashboardPage />} />
         <Route path="board/:boardId" element={<BoardPage />} />
         <Route path="board/:boardId/timeline" element={<TimelinePage />} />
+        <Route path="board/:boardId/list" element={<TimelinePage />} />{" "}
+        {/* list uses same page, different activeView */}
         <Route path="team/:teamId" element={<TeamPage />} />
         <Route path="settings" element={<SettingsPage />} />
       </Route>

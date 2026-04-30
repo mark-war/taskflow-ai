@@ -1,5 +1,6 @@
 import { Schema, model } from "mongoose";
 
+// Column schema to manage columns within a board
 const columnSchema = new Schema({
   id: { type: String, required: true },
   title: { type: String, required: true },
@@ -9,6 +10,7 @@ const columnSchema = new Schema({
   isCollapsed: { type: Boolean, default: false },
 });
 
+// Sprint schema to manage sprints within a board
 const sprintSchema = new Schema({
   id: { type: String, required: true },
   name: { type: String, required: true },
@@ -22,6 +24,7 @@ const sprintSchema = new Schema({
   },
 });
 
+// Main Board schema
 const boardSchema = new Schema(
   {
     name: { type: String, required: true, trim: true },
@@ -69,7 +72,7 @@ const boardSchema = new Schema(
   { timestamps: true },
 );
 
-// Default columns for a new board
+// Static method to get default columns for a new board
 boardSchema.statics.defaultColumns = () => [
   { id: "backlog", title: "Backlog", color: "#94a3b8", position: 0 },
   { id: "todo", title: "To Do", color: "#6366f1", position: 1 },

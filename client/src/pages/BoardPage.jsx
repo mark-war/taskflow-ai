@@ -28,8 +28,12 @@ export default function BoardPage() {
 
   const [activeTask, setActiveTask] = useState(null);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
+  const [filters, setFilters] = useState({
+    search: "",
+    priority: "",
+    type: "",
+  });
 
-  // Stable ref so DnD callbacks never have stale task state
   const tasksRef = useRef(tasks);
   useEffect(() => {
     tasksRef.current = tasks;
@@ -42,7 +46,6 @@ export default function BoardPage() {
     }),
   );
 
-  // Load board + tasks
   useEffect(() => {
     if (!boardId) return;
     setLoading(true);
@@ -61,20 +64,31 @@ export default function BoardPage() {
     return () => leaveBoard(boardId);
   }, [boardId]);
 
-  // DnD drag start — snapshot the dragged task for overlay
+  // Filter tasks by search / priority / type
+  const filterTasks = useCallback(
+    (columnTasks) => {
+      const { search, priority, type } = filters;
+      return columnTasks.filter((t) => {
+        if (search && !t.title.toLowerCase().includes(search.toLowerCase()))
+          return false;
+        if (priority && t.priority !== priority) return false;
+        if (type && t.type !== type) return false;
+        return true;
+      });
+    },
+    [filters],
+  );
+
   const handleDragStart = useCallback(({ active }) => {
-    const task = tasksRef.current.find((t) => t._id === active.id);
-    setActiveTask(task || null);
+    setActiveTask(tasksRef.current.find((t) => t._id === active.id) || null);
   }, []);
 
-  // DnD drag over — optimistic reorder in store
   const handleDragOver = useCallback(
     ({ active, over }) => {
       if (!over || active.id === over.id) return;
-
       const current = tasksRef.current;
-      const draggedTask = current.find((t) => t._id === active.id);
-      if (!draggedTask) return;
+      const dragged = current.find((t) => t._id === active.id);
+      if (!dragged) return;
 
       const overIsColumn = currentBoard?.columns?.some((c) => c.id === over.id);
       const overTask = current.find((t) => t._id === over.id);
@@ -82,25 +96,21 @@ export default function BoardPage() {
       if (!targetColumn) return;
 
       setTasks((prev) => {
-        // Move task to new column
         let updated = prev.map((t) =>
-          t._id === active.id ? { ...t, column: targetColumn } : t,
+          t._id === active.id
+            ? { ...t, column: targetColumn, status: targetColumn } // ← sync status
+            : t,
         );
-
-        // If dropping over a task (not a column), reorder within list
         if (!overIsColumn && overTask) {
-          const activeIdx = updated.findIndex((t) => t._id === active.id);
-          const overIdx = updated.findIndex((t) => t._id === over.id);
-          updated = arrayMove(updated, activeIdx, overIdx);
+          const ai = updated.findIndex((t) => t._id === active.id);
+          const oi = updated.findIndex((t) => t._id === over.id);
+          updated = arrayMove(updated, ai, oi);
         }
-
-        // Recalculate position indices per column
         const groups = {};
         updated.forEach((t) => {
           if (!groups[t.column]) groups[t.column] = [];
           groups[t.column].push(t._id);
         });
-
         return updated.map((t) => ({
           ...t,
           position: groups[t.column].indexOf(t._id),
@@ -110,19 +120,19 @@ export default function BoardPage() {
     [currentBoard, setTasks],
   );
 
-  // DnD drag end — persist final order to server
-  const handleDragEnd = useCallback(
+  // CLAUDE
+  const handleDragEndX = useCallback(
     async ({ active }) => {
       setActiveTask(null);
-
       const current = tasksRef.current;
       const movedTask = current.find((t) => t._id === active.id);
       if (!movedTask) return;
 
-      // Send all tasks (server does bulk upsert on position+column)
+      // Send column, status AND position together
       const updates = current.map((t) => ({
         id: t._id,
         column: t.column,
+        status: t.column, // ← always sync status = column
         position: t.position,
       }));
 
@@ -132,6 +142,59 @@ export default function BoardPage() {
         toast.error("Failed to save order — reloading");
         const res = await tasksAPI.list({ boardId, limit: 500 });
         setTasks(res.data.tasks);
+      }
+    },
+    [boardId, setTasks],
+  );
+
+  // GROK
+  const handleDragEnd = useCallback(
+    async ({ active, over }) => {
+      if (!over || active.id === over.id) {
+        setActiveTask(null);
+        return;
+      }
+
+      const taskId = active.id;
+      const newColumnId = over.data?.current?.columnId || over.id; // Adjust based on your droppable setup
+
+      const currentTask = tasksRef.current.find((t) => t._id === taskId);
+      if (!currentTask) return;
+
+      // Optimistically update local ref + Zustand store
+      const updatedTask = {
+        ...currentTask,
+        column: newColumnId,
+        status: newColumnId, // keep them in sync
+        // position will be handled by backend usually
+      };
+
+      // Update Zustand store - THIS WAS MISSING
+      updateTask(taskId, updatedTask);
+
+      // Also update local ref for consistency
+      tasksRef.current = tasksRef.current.map((t) =>
+        t._id === taskId ? updatedTask : t,
+      );
+
+      try {
+        // Call your reorder API with only the necessary updates
+        // Better: only send the moved task instead of all tasks if possible
+        await tasksAPI.reorder([
+          {
+            id: taskId,
+            column: newColumnId,
+            status: newColumnId,
+            position: updatedTask.position, // or let backend calculate
+          },
+        ]);
+      } catch (err) {
+        toast.error("Failed to move task");
+        // Optional: revert optimistic update
+        const res = await tasksAPI.list({ boardId, limit: 500 });
+        setTasks(res.data.tasks);
+      } finally {
+        setActiveTask(null);
       }
     },
     [boardId, setTasks],
@@ -154,7 +217,7 @@ export default function BoardPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <BoardHeader board={currentBoard} />
+      <BoardHeader board={currentBoard} onFilterChange={setFilters} />
 
       <DndContext
         sensors={sensors}
@@ -175,9 +238,11 @@ export default function BoardPage() {
               <BoardColumn
                 key={column.id}
                 column={column}
-                tasks={tasks
-                  .filter((t) => t.column === column.id)
-                  .sort((a, b) => a.position - b.position)}
+                tasks={filterTasks(
+                  tasks
+                    .filter((t) => t.column === column.id)
+                    .sort((a, b) => a.position - b.position),
+                )}
                 boardId={boardId}
                 onTaskClick={(task) => setSelectedTaskId(task._id)}
               />
@@ -240,10 +305,9 @@ function AddColumnButton({ boardId }) {
     return (
       <button
         onClick={() => setAdding(true)}
-        className="flex-shrink-0 w-72 h-10 flex items-center gap-2 px-3 rounded-xl border-2 border-dashed border-[var(--color-border)] text-[var(--color-text-subtle)] hover:border-brand-500/40 hover:text-brand-500 transition-all duration-150 text-sm self-start"
+        className="flex-shrink-0 w-72 h-10 flex items-center gap-2 px-3 rounded-xl border-2 border-dashed border-[var(--color-border)] text-[var(--color-text-subtle)] hover:border-brand-500/40 hover:text-brand-500 transition-all text-sm self-start"
       >
-        <Plus size={15} />
-        Add column
+        <Plus size={15} /> Add column
       </button>
     );
   }

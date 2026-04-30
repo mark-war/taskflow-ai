@@ -5,10 +5,14 @@ const { sign, verify } = jsonwebtoken;
 import { User, Team } from "../models/index.js";
 import auth from "../middleware/auth.js";
 const { protect } = auth;
+
+// Helper functions to sign JWTs
 const signToken = (id) =>
   sign({ id }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || "15m",
   });
+
+// Refresh tokens are long-lived and stored in the database for revocation
 const signRefresh = (id) =>
   sign({ id }, process.env.JWT_REFRESH_SECRET, {
     expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || "7d",
@@ -27,9 +31,19 @@ router.post("/register", async (req, res, next) => {
 
     const user = await User.create({ name, email, password });
 
-    // Auto-create a personal team
+    // Create a default team for the new user
     const slug =
       `${name.toLowerCase().replace(/\s+/g, "-")}-${Date.now()}`.slice(0, 40);
+
+    // Ensure slug is unique (extremely unlikely to collide, but just in case)
+    const slugExists = await Team.findOne({ slug });
+    if (slugExists) {
+      return res
+        .status(500)
+        .json({ error: "Failed to generate unique team slug" });
+    }
+
+    // Use provided team name or default to "<name>'s Team"
     const team = await Team.create({
       name: teamName || `${name}'s Team`,
       slug,

@@ -13,7 +13,7 @@ import { User, Activity } from "../models/index.js";
 const router = express.Router();
 const { protect } = auth;
 
-// Helper: build board context for AI
+// Helper: gather board context for AI processing
 async function getBoardContext(boardId, userId) {
   const board = await Board.findById(boardId).populate(
     "members.user",
@@ -54,7 +54,7 @@ async function getBoardContext(boardId, userId) {
   };
 }
 
-// Helper: resolve assignee names to user IDs
+// Helper: resolve assignee names to user IDs based on board members
 async function resolveAssignees(names, teamMembers) {
   return teamMembers
     .filter((m) =>
@@ -63,7 +63,7 @@ async function resolveAssignees(names, teamMembers) {
     .map((m) => m.id);
 }
 
-// Helper: apply filter to tasks
+// Helper: apply filter criteria to a list of tasks for update/move/query operations
 function applyFilter(tasks, filter) {
   return tasks.filter((t) => {
     if (filter.column && t.column !== filter.column) return false;
@@ -263,7 +263,7 @@ router.post("/command", protect, async (req, res, next) => {
       }
     }
 
-    // Log AI activity after executing all actions
+    // Log the AI action in the activity feed
     await Activity.create({
       type: "ai_action",
       actor: req.user._id,
@@ -317,6 +317,7 @@ router.post("/enrich/:taskId", protect, async (req, res, next) => {
 
 // ============================================================
 // POST /api/ai/standup
+// Generate a standup summary for a team member based on their tasks
 // ============================================================
 router.post("/standup", protect, async (req, res, next) => {
   try {

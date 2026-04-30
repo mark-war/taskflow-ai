@@ -5,19 +5,23 @@ import {
   LayoutGrid,
   GanttChartSquare,
   List,
-  Search,
   Bell,
   Moon,
   Sun,
 } from "lucide-react";
-import { useThemeStore } from "@/store/index";
+import { useThemeStore } from "@/store/themeStore";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import clsx from "clsx";
 
 const VIEWS = [
-  { id: "kanban", Icon: LayoutGrid, label: "Board" },
-  { id: "timeline", Icon: GanttChartSquare, label: "Timeline" },
-  { id: "list", Icon: List, label: "List" },
+  { id: "kanban", Icon: LayoutGrid, label: "Board", path: "" },
+  {
+    id: "timeline",
+    Icon: GanttChartSquare,
+    label: "Timeline",
+    path: "/timeline",
+  },
+  { id: "list", Icon: List, label: "List", path: "/list" },
 ];
 
 export default function Topbar() {
@@ -32,11 +36,17 @@ export default function Topbar() {
   const onBoardPage = !!boardId;
 
   const handleViewChange = (view) => {
-    setActiveView(view);
+    setActiveView(view.id);
     if (!boardId) return;
-    if (view === "timeline") navigate(`/board/${boardId}/timeline`);
-    else navigate(`/board/${boardId}`);
+    navigate(`/board/${boardId}${view.path}`);
   };
+
+  // Determine active view from URL
+  const currentView = location.pathname.includes("/timeline")
+    ? "timeline"
+    : location.pathname.includes("/list")
+      ? "list"
+      : "kanban";
 
   const toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark");
 
@@ -54,28 +64,28 @@ export default function Topbar() {
         )}
       </div>
 
-      {/* Center: view switcher (board pages only) */}
+      {/* Center: view switcher */}
       {onBoardPage && (
         <div className="flex items-center gap-0.5 bg-[var(--color-bg)] rounded-lg p-0.5 border border-[var(--color-border)]">
-          {VIEWS.map(({ id, Icon, label }) => (
+          {VIEWS.map((view) => (
             <button
-              key={id}
-              onClick={() => handleViewChange(id)}
+              key={view.id}
+              onClick={() => handleViewChange(view)}
               className={clsx(
                 "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-150",
-                activeView === id
+                currentView === view.id
                   ? "bg-[var(--color-surface)] text-[var(--color-text)] shadow-sm"
                   : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]",
               )}
             >
-              <Icon size={13} />
-              {label}
+              <view.Icon size={13} />
+              {view.label}
             </button>
           ))}
         </div>
       )}
 
-      {/* Right: actions */}
+      {/* Right */}
       <div className="flex items-center gap-1.5">
         {/* Presence avatars */}
         {members.length > 0 && (
@@ -97,14 +107,14 @@ export default function Topbar() {
           </div>
         )}
 
-        {/* AI Bar trigger */}
+        {/* AI trigger */}
         <button
           onClick={toggleAIBar}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-500/10 text-brand-500 hover:bg-brand-500/20 text-xs font-medium transition-colors border border-brand-500/20"
         >
           <Sparkles size={13} />
           <span>Ask AI</span>
-          <span className="text-brand-500/60 text-[10px]">⌘K</span>
+          <span className="text-brand-500/60 text-[10px] font-mono">⌘K</span>
         </button>
 
         <button onClick={toggleTheme} className="btn-ghost p-2">
