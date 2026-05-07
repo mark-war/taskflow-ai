@@ -8,16 +8,22 @@ const { protect } = auth;
 router.get("/search", protect, async (req, res, next) => {
   try {
     const { q, teamId } = req.query;
-    const users = await User.find({
+    if (!q?.trim()) return res.json({ users: [] });
+
+    const query = {
       $or: [
-        { name: { $regex: q, $options: "i" } },
-        { email: { $regex: q, $options: "i" } },
+        { name: { $regex: q.trim(), $options: "i" } },
+        { email: { $regex: q.trim(), $options: "i" } },
       ],
-      teams: teamId,
       isActive: true,
-    })
-      .select("name email avatar")
-      .limit(10);
+      _id: { $ne: req.user._id }, // exclude self
+    };
+
+    // Optionally restrict to a team
+    if (teamId && teamId !== "undefined") query.teams = teamId;
+
+    const users = await User.find(query).select("name email avatar").limit(10);
+
     res.json({ users });
   } catch (err) {
     next(err);

@@ -7,14 +7,14 @@ const api = axios.create({
   timeout: 30000,
 });
 
-// Request interceptor — attach token
+// ── Request — attach token ────────────────────────────────
 api.interceptors.request.use((config) => {
   const { token } = useAuthStore.getState();
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-// Response interceptor — handle 401 + auto-refresh
+// ── Response — handle 401 + auto-refresh ─────────────────
 let refreshing = false;
 let refreshQueue = [];
 
@@ -22,14 +22,17 @@ api.interceptors.response.use(
   (res) => res,
   async (error) => {
     const original = error.config;
+    const status = error.response?.status;
     const { refreshToken, setAuth, logout } = useAuthStore.getState();
 
-    if (
-      error.response?.status === 401 &&
-      error.response?.data?.code === "TOKEN_EXPIRED" &&
-      !original._retry
-    ) {
+    // Retry once on any 401 (expired or otherwise), skip refresh/logout routes
+    const isAuthRoute =
+      original.url?.includes("/auth/refresh") ||
+      original.url?.includes("/auth/logout");
+
+    if (status === 401 && !original._retry && !isAuthRoute && refreshToken) {
       if (refreshing) {
+        // Queue while refresh is in progress
         return new Promise((resolve, reject) => {
           refreshQueue.push({ resolve, reject, config: original });
         });
@@ -42,18 +45,23 @@ api.interceptors.response.use(
         const { data } = await axios.post("/api/auth/refresh", {
           refreshToken,
         });
-        setAuth({ ...useAuthStore.getState(), token: data.token });
+        const newToken = data.token;
+
+        // Update store
+        setAuth({ ...useAuthStore.getState(), token: newToken });
 
         // Retry queued requests
         refreshQueue.forEach(({ resolve, config }) => {
-          config.headers.Authorization = `Bearer ${data.token}`;
+          config.headers.Authorization = `Bearer ${newToken}`;
           resolve(api(config));
         });
         refreshQueue = [];
 
-        original.headers.Authorization = `Bearer ${data.token}`;
+        // Retry original
+        original.headers.Authorization = `Bearer ${newToken}`;
         return api(original);
       } catch {
+        // Refresh failed — log out
         logout();
         refreshQueue.forEach(({ reject }) => reject(error));
         refreshQueue = [];
@@ -63,8 +71,8 @@ api.interceptors.response.use(
       }
     }
 
-    // Show toast for server errors (not auth)
-    if (error.response?.status >= 500) {
+    // Show toast for server errors only (not auth)
+    if (status >= 500) {
       toast.error("Server error — please try again");
     }
 
@@ -72,7 +80,7 @@ api.interceptors.response.use(
   },
 );
 
-// ── Typed API helpers ──────────────────────────────────────
+// ── Typed API helpers ─────────────────────────────────────
 
 export const authAPI = {
   login: (data) => api.post("/auth/login", data),
@@ -109,9 +117,12 @@ export const aiAPI = {
 };
 
 export const teamsAPI = {
+  list: () => api.get("/teams"),
   get: (id) => api.get(`/teams/${id}`),
   create: (data) => api.post("/teams", data),
+  update: (id, data) => api.patch(`/teams/${id}`, data),
   invite: (id, data) => api.post(`/teams/${id}/invite`, data),
+  addMember: (id, data) => api.post(`/teams/${id}/members`, data),
   removeMember: (teamId, userId) =>
     api.delete(`/teams/${teamId}/members/${userId}`),
 };
